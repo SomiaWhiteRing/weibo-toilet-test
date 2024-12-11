@@ -481,7 +481,7 @@
     return { dialog, progressCircle, progressInner, content, closeBtn };
   }
 
-  // 修改 RequestPool 类，添加错误频率检测
+  // 修改 RequestPool 类
   class RequestPool {
     constructor(maxConcurrent, logFn, errorFn) {
       this.maxConcurrent = maxConcurrent;
@@ -497,6 +497,9 @@
       // 错误频率检测
       this.errorTimes = [];
       this.isWaiting = false;
+
+      // 添加重试计数器
+      this.retryCount = new Map();
     }
 
     // 检查错误频率
@@ -524,19 +527,32 @@
         const result = await task();
         this.results[result.keyword] = result.count;
       } catch (error) {
-        this.error('任务失败，准备重试:', error);
+        // 获取当前任务的关键词
+        const keyword = await task().catch(e => e.keyword);
 
-        // 检查错误频率
-        if (this.checkErrorFrequency() && !this.isWaiting) {
-          this.isWaiting = true;
-          this.error('检测到频繁错误，等待3秒后继续...');
-          await new Promise(resolve => setTimeout(resolve, 3000));
-          this.errorTimes = []; // 清空错误记录
-          this.isWaiting = false;
+        // 更新重试计数
+        const currentRetries = this.retryCount.get(keyword) || 0;
+        this.retryCount.set(keyword, currentRetries + 1);
+
+        this.error(`任务失败，关键词 "${keyword}" 第 ${currentRetries + 1} 次重试:`, error);
+
+        // 检查重试次数
+        if (currentRetries < 10) {
+          // 检查错误频率
+          if (this.checkErrorFrequency() && !this.isWaiting) {
+            this.isWaiting = true;
+            this.error('检测到频繁错误，等待3秒后继续...');
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            this.errorTimes = []; // 清空错误记录
+            this.isWaiting = false;
+          }
+
+          this.add(task);
+          return;
+        } else {
+          this.error(`关键词 "${keyword}" 已达到最大重试次数，跳过`);
+          this.results[keyword] = 0; // 将结果设为0
         }
-
-        this.add(task);
-        return;
       } finally {
         this.running--;
         this.completedCount++;
@@ -598,7 +614,7 @@
     drawChart(dialog, wordCounts);
   }
 
-  // 修改 checkKeyword 函数，简化重试逻辑（因为重试由请求池处理）
+  // 修改 checkKeyword 函数，添加关键词信息到错误对象
   async function checkKeyword(userId, keyword) {
     log(`开始检查关键词: ${keyword}`);
     try {
@@ -610,7 +626,9 @@
       const data = await response.json();
 
       if (!response.ok || !data.data) {
-        throw new Error('请求失败');
+        const error = new Error('请求失败');
+        error.keyword = keyword;
+        throw error;
       }
 
       return {
@@ -618,8 +636,9 @@
         count: data.data.total || 0
       };
     } catch (error) {
+      error.keyword = keyword;
       error(`检查关键词 "${keyword}" 失败:`, error);
-      throw error; // 抛出错误，让请求池处理重试
+      throw error;
     }
   }
 
@@ -775,7 +794,7 @@
     titleInput.type = 'text';
     titleInput.className = 'toilet-title-input';
     // 从 localStorage 读取标题，如果没有则使用默认标题
-    titleInput.value = localStorage.getItem(TITLE_STORAGE_KEY) || '廁言廁語檢��機';
+    titleInput.value = localStorage.getItem(TITLE_STORAGE_KEY) || '廁言廁語檢測機';
     titleInput.placeholder = '输入标题';
     titleElement.replaceWith(titleInput);
 
