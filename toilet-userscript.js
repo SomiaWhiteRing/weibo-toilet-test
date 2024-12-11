@@ -1,9 +1,9 @@
 // ==UserScript==
-// @name         微博廁所度检测
+// @name         沖浪高手檢測機
 // @namespace    https://github.com/SomiaWhiteRing/weibo-toilet-test/
 // @license      MIT
-// @version      0.1
-// @description  检测微博用户的发言廁所度
+// @version      0.2
+// @description  检测微博用户的发言浓度
 // @author       苍旻白轮
 // @match        *://weibo.com/u/*
 // @match        *://www.weibo.com/u/*
@@ -16,7 +16,10 @@
   const DEBUG_MODE = false;  // 设为 true 开启测试模式
 
   // 词库定义
-  const words = [
+  const STORAGE_KEY = 'weibo-toilet-words';
+  const TITLE_STORAGE_KEY = 'weibo-toilet-title';
+
+  const defaultWords = [
     "完完全全我", "女王", "这真的是我", "笑死我了", "女王一枚", "本宝", "互关", "啊啊啊啊啊这真的是我",
     "本宝宝", "我对老公", "我对室友", "态度", "心情", "熏情", "mood", "木的", "好想吃", "我帮他",
     "我真的会这样", "互关爱吃", "呃呃呃", "他/她怎么了", "就是那个谁", "那个谁真的死了", "我就长这样",
@@ -37,6 +40,25 @@
     "谁来管管", "别逼我", "我不知道这世界到底怎么了", "怎么你了", "什么意思呢", "我请问", "不认识", "nbcs", "我是",
     "换id了", "前世是", "互关帮我转转", "早就说过"
   ];
+
+  let words; // 改为变量声明
+  let activeWords; // 将 activeWords 改为变量声明
+
+  // 修改获取或初始化词库函数
+  function initializeWords() {
+    let storedWords = localStorage.getItem(STORAGE_KEY);
+    if (!storedWords) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(defaultWords));
+      words = defaultWords;
+    } else {
+      words = JSON.parse(storedWords);
+    }
+    // 根据测试模式决定使用的词库
+    activeWords = DEBUG_MODE ? words.slice(0, 10) : words;
+  }
+
+  // 在词库定义后立即执行初始化
+  initializeWords();
 
   GM_addStyle(`
         .toilet-check-btn {
@@ -101,7 +123,7 @@
         .toilet-header {
             position: sticky;
             top: 0;
-            padding: 16px 24px;
+            padding: 16px 80px;
             background: rgba(255, 255, 255, 0.95);
             backdrop-filter: blur(10px);
             border-bottom: 1px solid rgba(0, 0, 0, 0.1);
@@ -290,9 +312,6 @@
         }
     `);
 
-  // 根据测试模式决定使用的词库
-  const activeWords = DEBUG_MODE ? words.slice(0, 10) : words;
-
   // 自定义日志函数
   const log = (...args) => {
     if (DEBUG_MODE) {
@@ -323,11 +342,26 @@
   function addButton(container) {
     // 检查按钮是否已存在
     if (!container.querySelector('.toilet-check-btn')) {
-      const button = document.createElement('div');
-      button.className = 'toilet-check-btn';
-      button.textContent = '🚽';
-      button.onclick = startCheck;
-      container.appendChild(button);
+      const buttonContainer = document.createElement('div');
+      buttonContainer.style.display = 'flex';
+      buttonContainer.style.gap = '8px';
+
+      // 检测按钮
+      const checkButton = document.createElement('div');
+      checkButton.className = 'toilet-check-btn';
+      checkButton.textContent = '🚽';
+      checkButton.onclick = startCheck;
+
+      // 编辑按钮
+      const editButton = document.createElement('div');
+      editButton.className = 'toilet-check-btn toilet-edit-btn';
+      editButton.textContent = '📝';
+      editButton.style.backgroundColor = '#808080';
+      editButton.onclick = openWordEditor;
+
+      buttonContainer.appendChild(checkButton);
+      buttonContainer.appendChild(editButton);
+      container.appendChild(buttonContainer);
       console.log('按钮添加成功!');
     }
   }
@@ -362,7 +396,7 @@
     });
   }
 
-  // 等待 Chart.js 加载完成后再初始化
+  // 等待 Chart.js 加载完成再初始化
   loadChartJs().then(() => {
     init();
     observeDOM();
@@ -405,7 +439,7 @@
 
     const title = document.createElement('div');
     title.className = 'toilet-title';
-    title.textContent = '微博廁度檢測機';
+    title.textContent = localStorage.getItem(TITLE_STORAGE_KEY) || '廁言廁語檢測機';
     header.appendChild(title);
 
     // 添加关闭按钮（默认隐藏）
@@ -435,9 +469,12 @@
     progressInner.className = 'toilet-progress-inner';
     progressContainer.appendChild(progressInner);
 
-    // 监听dialog关闭事件
+    // 监听dialog关闭事件，清理内容
     dialog.addEventListener('close', () => {
       document.documentElement.style.overflow = originalOverflow;
+      // 清理内容
+      content.innerHTML = '';
+      dialog.remove(); // 完全移除dialog元素
     });
 
     dialog.showModal();
@@ -521,7 +558,7 @@
     }
   }
 
-  // 修改主检测流程
+  // 修改主检流程
   async function startCheck() {
     log('开始检测流程');
     const userId = location.href.match(/https:\/\/(?:www\.)?weibo\.com\/u\/(\d+)/)?.[1];
@@ -597,7 +634,7 @@
 
     // 保留header，清空content
     content.innerHTML = '';
-    header.querySelector('.toilet-title').textContent = '微博廁度檢測結果';
+    header.querySelector('.toilet-title').textContent = localStorage.getItem(TITLE_STORAGE_KEY) || '廁言廁語檢測機';
 
     const resultContainer = document.createElement('div');
     resultContainer.className = 'toilet-result-container';
@@ -669,5 +706,111 @@
       keywordsCloud.appendChild(keywordItem);
     });
     resultContainer.appendChild(keywordsCloud);
+  }
+
+  // 添加词库编辑器相关样式
+  GM_addStyle(`
+    .toilet-edit-textarea {
+        width: calc(100% - 40px);
+        height: 400px;
+        margin: 20px;
+        padding: 12px;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        font-family: monospace;
+        resize: vertical;
+        box-sizing: border-box;
+    }
+
+    .toilet-title-input {
+        width: 100%;
+        padding: 8px;
+        font-size: 24px;
+        border: 1px solid rgba(0, 0, 0, 0.1);
+        border-radius: 8px;
+        background: transparent;
+        color: inherit;
+        text-align: center;
+        font-weight: 600;
+        background: linear-gradient(45deg, #FF6B6B, #4ECDC4);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        box-sizing: border-box;
+    }
+
+    .toilet-title-input:focus {
+        outline: none;
+        border-color: rgba(78, 205, 196, 0.5);
+    }
+
+    .toilet-save-btn {
+        display: block;
+        margin: 0 auto;
+        padding: 8px 24px;
+        border: none;
+        border-radius: 20px;
+        background: linear-gradient(45deg, #FF6B6B, #4ECDC4);
+        color: white;
+        font-size: 16px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+    .toilet-save-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+  `);
+
+  // 添加词库编辑器功能
+  function openWordEditor() {
+    const { dialog, content } = createDialog();
+
+    // 隐藏进度条相关元素
+    content.querySelector('.toilet-progress-container')?.remove();
+
+    // 将标题改为可编辑的输入框
+    const titleElement = dialog.querySelector('.toilet-title');
+    const titleInput = document.createElement('input');
+    titleInput.type = 'text';
+    titleInput.className = 'toilet-title-input';
+    // 从 localStorage 读取标题，如果没有则使用默认标题
+    titleInput.value = localStorage.getItem(TITLE_STORAGE_KEY) || '廁言廁語檢��機';
+    titleInput.placeholder = '输入标题';
+    titleElement.replaceWith(titleInput);
+
+    // 创建文本区域
+    const textarea = document.createElement('textarea');
+    textarea.className = 'toilet-edit-textarea';
+    textarea.value = JSON.parse(localStorage.getItem(STORAGE_KEY)).join('\n');
+    content.appendChild(textarea);
+
+    // 创建保存按钮
+    const saveButton = document.createElement('button');
+    saveButton.className = 'toilet-save-btn';
+    saveButton.textContent = '保存更改';
+    saveButton.onclick = () => {
+      const newWords = textarea.value
+        .split('\n')
+        .map(word => word.trim())
+        .filter(word => word);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(newWords));
+      localStorage.setItem(TITLE_STORAGE_KEY, titleInput.value);
+
+      // 重新初始化词库
+      initializeWords();
+
+      dialog.close();
+    };
+    content.appendChild(saveButton);
+
+    // 修改关闭按钮的处理方式
+    const closeBtn = dialog.querySelector('.toilet-close-btn');
+    closeBtn.style.display = 'flex';
+    closeBtn.onclick = () => {
+      content.innerHTML = ''; // 清理内容
+      dialog.close();
+      dialog.remove(); // 完全移除dialog元素
+    };
   }
 })();
