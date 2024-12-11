@@ -8,7 +8,6 @@
 // @match        *://weibo.com/u/*
 // @match        *://www.weibo.com/u/*
 // @grant        GM_addStyle
-// @require      https://cdn.jsdelivr.net/npm/chart.js
 // ==/UserScript==
 
 (function () {
@@ -22,7 +21,7 @@
     "本宝宝", "我对老公", "我对室友", "态度", "心情", "熏情", "mood", "木的", "好想吃", "我帮他",
     "我真的会这样", "互关爱吃", "呃呃呃", "他/她怎么了", "就是那个谁", "那个谁真的死了", "我就长这样",
     "你长得好吗", "你不要这样说好吗", "我老了以后", "互关老了以后", "扣一下", "很好笑", "好那个", "我老公",
-    "吃�������omg", "欧米茄", "天呐", "天哪", "这也太", "妈妈", "尊的是我", "长成这样我不知道我", "那里好痒",
+    "吃一下omg", "欧米茄", "天呐", "天哪", "这也太", "妈妈", "尊的是我", "长成这样我不知道我", "那里好痒",
     "本女子", "我那里有事", "湿了", "是谁", "私我", "谢谢老公", "谢谢宝宝", "嗯嘟", "我们来了",
     "我们走了", "隐隐约约听说", "我帮你", "还以为是**走了出来", "我跟你们有钱人拼了", "我要卖了",
     "穷", "焦虑", "受不了了", "fjgjdnvid", "求你们看", "这一次我一定要赢", "slau", "崩溃", "b溃了", "奔溃",
@@ -31,7 +30,7 @@
     "我老公呢", "我的老公在哪里", "我和老公", "笑得我那里疼", "好想尖叫", "尖叫了", "wflbb", "我文化水平",
     "我做题", "我解决问题", "哎呦喂", "我求你了", "年度视频", "年度",
     "legend", "iconic", "对不起", "我下跪", "对不已", "寸不己", "已构成一种", "喂", "首页又在", "这是在干什么",
-    "我真的要双了", "我真的��拉", "��了", "再发一个试试呢", "好嫉妒", "好度", "好羡慕", "好精彩", "强势围观",
+    "我真的要双了", "我真的要拉黑了", "再发一个试试呢", "好嫉妒", "好季度", "好羡慕", "好精彩", "强势围观",
     "我天呢", "没什么好说的", "封神", "好封神", "好震撼", "好美", "好米", "好难听", "概念感觉", "好丑",
     "好穷", "有点像那个谁", "这可以是我们", "闺蜜", "诡秘", "好闺蜜", "彪子", "怎么办",
     "谁能送我", "好想要", "那个了", "怎么火了", "已举办", "谁问了", "没人问", "小姐姐你", "姐妹你", "这是在干什么",
@@ -352,9 +351,24 @@
     });
   }
 
-  // 初始化并开始监视
-  init();
-  observeDOM();
+  // 动态加载 Chart.js
+  function loadChartJs() {
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/chart.js';
+      script.onload = resolve;
+      script.onerror = reject;
+      document.head.appendChild(script);
+    });
+  }
+
+  // 等待 Chart.js 加载完成后再初始化
+  loadChartJs().then(() => {
+    init();
+    observeDOM();
+  }).catch(err => {
+    console.error('加载 Chart.js 失败:', err);
+  });
 
   // 创建并显示对话框
   function createDialog() {
@@ -595,7 +609,7 @@
     chartContainer.appendChild(canvas);
     resultContainer.appendChild(chartContainer);
 
-    // ��序词频
+    // 序词频
     const sortedWords = Object.entries(wordCounts)
       .sort(([, a], [, b]) => b - a);
 
